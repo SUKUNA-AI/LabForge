@@ -1,32 +1,23 @@
 # LabForge
 
-LabForge is a backend/AI engineering-memory project built as a FastAPI microservice system. The first working milestone is `task-service`: a small async FastAPI service that stores tasks in PostgreSQL through SQLAlchemy and Alembic migrations.
+LabForge - учебно-практический backend/AI-проект для инженерной памяти: задачи, эксперименты, заметки, агентные сценарии и работа с LLM.
 
-## Current Status
+Сейчас реализован первый сервис: `task-service`.
 
-Implemented:
+## Что Уже Есть
 
-- Async FastAPI `task-service`
-- PostgreSQL persistence for tasks
-- SQLAlchemy async sessions
-- Alembic migrations in async mode
-- Task endpoints:
+- FastAPI `task-service`
+- асинхронная работа с PostgreSQL через SQLAlchemy
+- миграции Alembic в async-режиме
+- Pydantic-схемы для задач
+- endpoints для задач:
   - `POST /tasks`
   - `GET /tasks`
   - `GET /tasks/{task_id}`
   - `PATCH /tasks/{task_id}`
   - `GET /health`
 
-Planned next services:
-
-- `experiment-service`
-- `llm-service`
-- `agent-service`
-- `gateway-service`
-- `note-service`
-- C++ `preprocessing-service`
-
-## Project Layout
+## Структура
 
 ```text
 services/
@@ -50,72 +41,77 @@ migrations/
     env.py
     versions/
 
+main.py
 alembic.ini
 ```
 
-## Configuration
+Корневой `main.py` нужен для удобного локального запуска из корня проекта.
 
-Create a local `.env` file in the repository root. Do not commit it.
+## Переменные Окружения
 
-Required variable:
+Создай локальный `.env` в корне проекта. Этот файл не коммитится.
+
+Минимально нужно:
 
 ```env
 DATABASE_URL=postgresql+asyncpg://postgres:your_password@localhost:5432/labforge_task_service
 ```
 
-The project uses the async PostgreSQL driver `asyncpg`.
+Пример с локальным PostgreSQL:
 
-## Database
-
-Run migrations from the repository root:
-
-```bash
-alembic upgrade head
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:qwerty@localhost:5432/labforge_task_service
 ```
 
-Check migration state:
+## Установка Зависимостей
 
-```bash
-alembic current
-```
-
-Check whether SQLAlchemy models and migrations are in sync:
-
-```bash
-alembic check
-```
-
-## Running Task Service
-
-Install the needed Python packages in your environment:
-
-```bash
+```powershell
 pip install fastapi uvicorn sqlalchemy alembic asyncpg python-dotenv pydantic
 ```
 
-Start the service from the repository root:
+## Миграции
 
-```bash
-set PYTHONPATH=services/task-service/src
-uvicorn task_service.main:app --reload
-```
-
-On PowerShell:
+Применить миграции:
 
 ```powershell
-$env:PYTHONPATH="services/task-service/src"
-uvicorn task_service.main:app --reload
+alembic upgrade head
 ```
 
-Then open:
+Проверить текущую миграцию:
+
+```powershell
+alembic current
+```
+
+Проверить, что модели и миграции синхронизированы:
+
+```powershell
+alembic check
+```
+
+## Запуск
+
+Из корня проекта:
+
+```powershell
+uvicorn main:app --reload
+```
+
+После запуска Swagger будет доступен здесь:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-## Task Model
+А health-check здесь:
 
-Current task fields:
+```text
+http://127.0.0.1:8000/health
+```
+
+## Модель Задачи
+
+Задача сейчас хранит:
 
 - `id`
 - `title`
@@ -125,7 +121,7 @@ Current task fields:
 - `created_at`
 - `updated_at`
 
-Current statuses:
+Текущие статусы:
 
 - `To Do`
 - `In Progress`
@@ -133,20 +129,13 @@ Current statuses:
 - `Testing`
 - `Completed`
 
-## Git Hygiene
+## Что Дальше
 
-Ignored by default:
+Ближайшие следующие шаги:
 
-- `.env` and local secrets
-- Python caches and virtual environments
-- build outputs
-- PostgreSQL dumps and local data
-- C++/CMake generated artifacts
-- all Markdown drafts except `README.md`
-
-Tracked:
-
-- source code
-- Alembic migration files
-- service structure
-- root `README.md`
+- вынести бизнес-логику из роутеров в application/service слой
+- добавить repository-слой
+- добавить тесты для `task-service`
+- добавить `experiment-service`
+- позже подключить `agent-service`, `llm-service`, `gateway-service`, `note-service`
+- отдельно добавить C++ `preprocessing-service`
