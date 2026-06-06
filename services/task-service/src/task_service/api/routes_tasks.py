@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from task_service.infrastructure.db.models import Task
+from task_service.infrastructure.db.models import TaskModel as Task
 from task_service.schemas.task import TaskCreate, TaskRead, TaskUpdate
 from task_service.infrastructure.db.session import get_db
 
