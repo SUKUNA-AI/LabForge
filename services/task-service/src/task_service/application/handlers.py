@@ -1,8 +1,6 @@
 from collections.abc import Sequence
 
 from task_service.application.commands import (
-    CancelTaskCommand,
-    CompleteTaskCommand,
     CreateTaskCommand,
     GetTaskCommand,
     ListTasksCommand,
@@ -81,6 +79,19 @@ async def list_tasks(
         )
 
 
+async def count_tasks(
+    command: ListTasksCommand,
+    uow: AbstractUnitOfWork,
+) -> int:
+    async with uow:
+        return await uow.tasks.count(
+            project_uid=command.project_uid,
+            status=command.status,
+            priority=command.priority,
+            source_type=command.source_type,
+        )
+
+
 async def update_task(command: UpdateTaskCommand, uow: AbstractUnitOfWork) -> Task:
     async with uow:
         task = await uow.tasks.get_by_uid(command.uid)
@@ -88,60 +99,21 @@ async def update_task(command: UpdateTaskCommand, uow: AbstractUnitOfWork) -> Ta
         if task is None:
             raise TaskNotFound(f"Task with uid {command.uid} was not found")
 
-        if command.title is not None:
+        if _field_should_update(command, "title"):
             task.change_title(command.title)
-        if command.description is not None:
+        if _field_should_update(command, "description"):
             task.change_description(command.description)
-        if command.status is not None:
+        if _field_should_update(command, "status"):
             task.change_status(command.status)
-        if command.priority is not None:
+        if _field_should_update(command, "priority"):
             task.change_priority(command.priority)
-        if command.project_uid is not None:
-            task.project_uid = command.project_uid
-        if command.source_type is not None:
-            task.source_type = command.source_type
-        if command.source_uid is not None:
-            task.source_uid = command.source_uid
+        if _field_should_update(command, "project_uid"):
+            task.change_project_uid(command.project_uid)
+        if _field_should_update(command, "source_type"):
+            task.change_source_type(command.source_type)
+        if _field_should_update(command, "source_uid"):
+            task.change_source_uid(command.source_uid)
 
-        updated_task = await uow.tasks.update(task)
-
-        if updated_task is None:
-            raise TaskNotFound(f"Task with uid {command.uid} was not found")
-
-        await uow.commit()
-
-        return updated_task
-
-
-async def complete_task(
-    command: CompleteTaskCommand,
-    uow: AbstractUnitOfWork,
-) -> Task:
-    async with uow:
-        task = await uow.tasks.get_by_uid(command.uid)
-
-        if task is None:
-            raise TaskNotFound(f"Task with uid {command.uid} was not found")
-
-        task.complete()
-        updated_task = await uow.tasks.update(task)
-
-        if updated_task is None:
-            raise TaskNotFound(f"Task with uid {command.uid} was not found")
-
-        await uow.commit()
-
-        return updated_task
-
-
-async def cancel_task(command: CancelTaskCommand, uow: AbstractUnitOfWork) -> Task:
-    async with uow:
-        task = await uow.tasks.get_by_uid(command.uid)
-
-        if task is None:
-            raise TaskNotFound(f"Task with uid {command.uid} was not found")
-
-        task.cancel()
         updated_task = await uow.tasks.update(task)
 
         if updated_task is None:
@@ -161,3 +133,10 @@ def _task_matches_put_command(task: Task, command: PutTaskCommand) -> bool:
         and task.source_type == command.source_type
         and task.source_uid == command.source_uid
     )
+
+
+def _field_should_update(command: UpdateTaskCommand, field_name: str) -> bool:
+    if command.fields_set is not None:
+        return field_name in command.fields_set
+
+    return getattr(command, field_name) is not None

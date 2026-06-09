@@ -54,6 +54,19 @@ class Task:
         self.priority = priority
         self._touch()
 
+    def change_project_uid(self, project_uid: UUID | None) -> None:
+        self.project_uid = project_uid
+        self._touch()
+
+    def change_source_type(self, source_type: TaskSourceType) -> None:
+        self._validate_source_type(source_type)
+        self.source_type = source_type
+        self._touch()
+
+    def change_source_uid(self, source_uid: UUID | None) -> None:
+        self.source_uid = source_uid
+        self._touch()
+
     def complete(self) -> None:
         self.change_status(TaskStatus.COMPLETED)
 

@@ -50,13 +50,4 @@ class UpdateTaskCommand:
     project_uid: UUID | None = None
     source_type: TaskSourceType | None = None
     source_uid: UUID | None = None
-
-
-@dataclass(frozen=True)
-class CompleteTaskCommand:
-    uid: UUID
-
-
-@dataclass(frozen=True)
-class CancelTaskCommand:
-    uid: UUID
+    fields_set: frozenset[str] | None = None
