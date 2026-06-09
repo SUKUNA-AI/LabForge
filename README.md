@@ -2,9 +2,9 @@
 
 LabForge - учебно-практический backend/AI-проект для инженерной памяти: задачи, эксперименты, заметки, агентные сценарии и работа с LLM.
 
-Сейчас реализован первый сервис: `task-service`.
+Сейчас завершен первый сервис: `task-service`.
 
-## Что Уже Есть
+## Что Уже Готово
 
 - FastAPI `task-service`
 - асинхронная работа с PostgreSQL через SQLAlchemy
@@ -12,14 +12,80 @@ LabForge - учебно-практический backend/AI-проект для 
 - domain model для задач: `Task`, статусы, приоритеты, source types и доменные ошибки
 - repository-слой: `AbstractTaskRepository`, `SqlAlchemyTaskRepository`, mapper `TaskModel <-> Task`
 - Unit of Work для управления `AsyncSession`, `commit` и `rollback`
-- application layer: commands, handlers и application errors
-- подготовка REST API-контракта: request/response schemas, public `uid`, list metadata и standard error schema
-- текущие legacy endpoints для задач:
-  - `POST /tasks`
-  - `GET /tasks`
-  - `GET /tasks/{task_id}`
-  - `PATCH /tasks/{task_id}`
-  - `GET /health`
+- application layer: commands, handlers, results и application errors
+- REST API v1 через поток `request -> command -> handler -> presenter -> response`
+- public `uid` для внешнего API
+- list response с `items`, `meta`, `links`
+- pagination helpers: `limit`, `offset`, `self`, `next`, `prev`
+- presenters: `Task -> TaskResponse`
+- standard error responses в стиле Problem Details
+- health endpoints: live/ready
+- profile endpoint для описания task-контракта
+- unit/API contract tests на `unittest`
+
+## API
+
+Основной API живет под `/api/v1`.
+
+### Tasks
+
+```text
+POST   /api/v1/tasks
+GET    /api/v1/tasks
+GET    /api/v1/tasks/profile
+GET    /api/v1/tasks/{uid}
+PUT    /api/v1/tasks/{uid}
+PATCH  /api/v1/tasks/{uid}
+```
+
+`POST /api/v1/tasks` создает задачу.
+
+`GET /api/v1/tasks` возвращает список задач с пагинацией и фильтрами:
+
+- `limit`
+- `offset`
+- `status`
+- `priority`
+- `project_uid`
+- `source_type`
+
+`GET /api/v1/tasks/profile` возвращает описание доступных полей, статусов, приоритетов, source types, actions и links.
+
+`GET /api/v1/tasks/{uid}` возвращает одну задачу по публичному `uid`.
+
+`PUT /api/v1/tasks/{uid}` создает задачу с указанным `uid`, если ее еще нет. Если задача уже есть и данные совпадают, возвращает существующую. Если задача уже есть, но данные отличаются, возвращает конфликт.
+
+`PATCH /api/v1/tasks/{uid}` частично обновляет задачу.
+
+Завершение и отмена задачи тоже идут через `PATCH`:
+
+```json
+{
+  "status": "completed"
+}
+```
+
+```json
+{
+  "status": "cancelled"
+}
+```
+
+Отдельных command endpoints вроде `/complete` и `/cancel` сейчас нет: для текущей модели это обычное изменение статуса.
+
+### Health
+
+```text
+GET /api/v1/health/live
+GET /api/v1/health/ready
+GET /health
+```
+
+`/api/v1/health/live` проверяет, что приложение отвечает.
+
+`/api/v1/health/ready` проверяет готовность приложения и доступность базы данных.
+
+`/health` оставлен как legacy alias для простого локального health-check.
 
 ## Структура
 
@@ -29,6 +95,9 @@ services/
     src/
       task_service/
         api/
+          errors.py
+          pagination.py
+          presenters.py
           routes_health.py
           routes_tasks.py
         application/
@@ -56,6 +125,8 @@ services/
           responses.py
           task.py
         main.py
+    tests/
+      test_task_service.py
 
 migrations/
   task_service/
@@ -118,21 +189,37 @@ alembic check
 uvicorn main:app --reload
 ```
 
-После запуска Swagger будет доступен здесь:
+Swagger:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-А health-check здесь:
+Health-check:
 
 ```text
-http://127.0.0.1:8000/health
+http://127.0.0.1:8000/api/v1/health/live
+```
+
+## Тесты
+
+Тесты написаны на стандартном `unittest`, поэтому отдельный `pytest` сейчас не нужен.
+
+Запуск:
+
+```powershell
+python -m unittest discover -s services/task-service/tests -v
+```
+
+Дополнительная проверка синтаксиса:
+
+```powershell
+python -m compileall services/task-service/src/task_service services/task-service/tests
 ```
 
 ## Модель Задачи
 
-Задача сейчас хранит:
+Задача хранит:
 
 - `id`
 - `uid`
@@ -177,26 +264,26 @@ http://127.0.0.1:8000/health
 Внутренний поток для use-case слоя:
 
 ```text
-application handler
-  -> UnitOfWork
-     -> TaskRepository
-        -> task_mapper
-           -> TaskModel / PostgreSQL
+HTTP request
+  -> request schema
+     -> command
+        -> application handler
+           -> UnitOfWork
+              -> TaskRepository
+                 -> task_mapper
+                    -> TaskModel / PostgreSQL
+           -> presenter
+              -> response schema
 ```
 
-Цель этого разделения: роуты должны принимать HTTP, собирать command, вызывать handler и отдавать response. SQLAlchemy, `commit`, `select` и `TaskModel` не должны жить в API routes после следующего этапа рефакторинга.
+Цель этого разделения: HTTP-слой принимает запрос, собирает command, вызывает application handler и отдает response. SQLAlchemy, `commit`, `select` и `TaskModel` не живут в API routes.
 
 ## Что Дальше
 
 Ближайшие следующие шаги:
 
-- завершить REST API слой под `/api/v1`
-- добавить presenters: `Task -> TaskResponse`, list response с `items/meta/links`
-- добавить standard error builders в Problem Details style
-- добавить pagination helpers: default `limit=50`, max `limit=100`, `offset>=0`
-- переписать `routes_tasks.py`, чтобы он шёл через `request -> command -> handler -> presenter`
-- добавить `health/live`, `health/ready` и `profiles/task`
-- добавить unit/integration/API tests для `task-service`
+- добавить правила переходов статусов, если появится реальная workflow-логика
+- добавить integration tests с реальной тестовой PostgreSQL
 - добавить `experiment-service`
 - позже подключить `agent-service`, `llm-service`, `gateway-service`, `note-service`
 - отдельно добавить C++ `preprocessing-service`
