@@ -1,18 +1,37 @@
-import os
-from dotenv import load_dotenv
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from collections.abc import AsyncGenerator
+from functools import lru_cache
 
-load_dotenv()
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
-DATABASE_URL = os.environ.get('DATABASE_URL')
+from task_service.infrastructure.config import get_settings
 
-if DATABASE_URL is None:
-    raise RuntimeError("DATABASE_URL is not set")
 
-async_engine = create_async_engine(DATABASE_URL, echo=True)
-async_session_maker = async_sessionmaker(async_engine, expire_on_commit=False, class_=AsyncSession)
+@lru_cache
+def get_async_engine() -> AsyncEngine:
+    settings = get_settings()
+    return create_async_engine(settings.database_url, echo=settings.sql_echo)
 
-async def get_db()-> AsyncGenerator[AsyncSession, None]:
-    async with async_session_maker() as session:
+
+@lru_cache
+def get_async_session_maker() -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(
+        get_async_engine(),
+        expire_on_commit=False,
+        class_=AsyncSession,
+    )
+
+
+async def dispose_async_engine() -> None:
+    await get_async_engine().dispose()
+    get_async_engine.cache_clear()
+    get_async_session_maker.cache_clear()
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with get_async_session_maker()() as session:
         yield session

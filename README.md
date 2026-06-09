@@ -22,6 +22,7 @@ LabForge - учебно-практический backend/AI-проект для 
 - health endpoints: live/ready
 - profile endpoint для описания task-контракта
 - unit/API contract tests на `unittest`
+- Dockerfile и Docker Compose для запуска `task-service` вместе с PostgreSQL
 
 ## API
 
@@ -115,6 +116,7 @@ services/
           errors.py
           task.py
         infrastructure/
+          config.py
           db/
             base.py
             models.py
@@ -125,16 +127,25 @@ services/
           responses.py
           task.py
         main.py
+    docker/
+      .env.example
+      Dockerfile
+      Dockerfile.dockerignore
+      docker-compose.yml
+      entrypoint.py
+    pyproject.toml
+    requirements.txt
     tests/
       test_task_service.py
+      test_task_service_integration.py
 
 migrations/
   task_service/
     env.py
     versions/
 
-main.py
 alembic.ini
+main.py
 ```
 
 Корневой `main.py` нужен для удобного локального запуска из корня проекта.
@@ -158,7 +169,13 @@ DATABASE_URL=postgresql+asyncpg://postgres:qwerty@localhost:5432/labforge_task_s
 ## Установка Зависимостей
 
 ```powershell
-pip install fastapi uvicorn sqlalchemy alembic asyncpg python-dotenv pydantic
+pip install -r services/task-service/requirements.txt
+```
+
+Либо установить сервис как локальный editable package:
+
+```powershell
+pip install -e services/task-service
 ```
 
 ## Миграции
@@ -183,6 +200,8 @@ alembic check
 
 ## Запуск
 
+### Локально
+
 Из корня проекта:
 
 ```powershell
@@ -201,6 +220,67 @@ Health-check:
 http://127.0.0.1:8000/api/v1/health/live
 ```
 
+### Через Docker Compose
+
+Скопируй пример окружения, если локального `.env` еще нет:
+
+```powershell
+Copy-Item services/task-service/docker/.env.example services/task-service/docker/.env
+```
+
+Поднять PostgreSQL 18.4 и `task-service` одной командой:
+
+```powershell
+docker compose `
+  -f services/task-service/docker/docker-compose.yml `
+  --env-file services/task-service/docker/.env `
+  up --build
+```
+
+Compose поднимает:
+
+- `task-db` на PostgreSQL 18.4
+- `task-service` на FastAPI/Uvicorn
+
+Для PostgreSQL 18 volume монтируется в `/var/lib/postgresql`, а `PGDATA`
+установлен в `/var/lib/postgresql/18/docker`. Это соответствует новой схеме
+данных официального Docker-образа PostgreSQL 18+.
+
+При старте контейнера `task-service` автоматически выполняет:
+
+```powershell
+alembic upgrade head
+```
+
+Порты по умолчанию:
+
+```text
+task-service: http://127.0.0.1:8000
+postgres:     localhost:5433
+```
+
+Внутри Compose `DATABASE_URL` для `task-service` собирается из
+`POSTGRES_USER`, `POSTGRES_PASSWORD` и `POSTGRES_DB`, чтобы пароль сервиса
+не расходился с паролем контейнера PostgreSQL.
+
+Остановить контейнеры:
+
+```powershell
+docker compose `
+  -f services/task-service/docker/docker-compose.yml `
+  --env-file services/task-service/docker/.env `
+  down
+```
+
+Остановить и удалить volume с базой:
+
+```powershell
+docker compose `
+  -f services/task-service/docker/docker-compose.yml `
+  --env-file services/task-service/docker/.env `
+  down -v
+```
+
 ## Тесты
 
 Тесты написаны на стандартном `unittest`, поэтому отдельный `pytest` сейчас не нужен.
@@ -215,6 +295,23 @@ python -m unittest discover -s services/task-service/tests -v
 
 ```powershell
 python -m compileall services/task-service/src/task_service services/task-service/tests
+```
+
+Интеграционный smoke-тест с реальной PostgreSQL включается явно:
+
+```powershell
+$env:RUN_TASK_SERVICE_INTEGRATION_TESTS="1"
+python -m unittest discover -s services/task-service/tests -p "test_task_service_integration.py" -v
+```
+
+Через Docker Compose:
+
+```powershell
+docker compose `
+  -f services/task-service/docker/docker-compose.yml `
+  --env-file services/task-service/docker/.env `
+  run --rm -e RUN_TASK_SERVICE_INTEGRATION_TESTS=1 task-service `
+  python -m unittest discover -s services/task-service/tests -v
 ```
 
 ## Модель Задачи
@@ -283,7 +380,6 @@ HTTP request
 Ближайшие следующие шаги:
 
 - добавить правила переходов статусов, если появится реальная workflow-логика
-- добавить integration tests с реальной тестовой PostgreSQL
 - добавить `experiment-service`
 - позже подключить `agent-service`, `llm-service`, `gateway-service`, `note-service`
 - отдельно добавить C++ `preprocessing-service`

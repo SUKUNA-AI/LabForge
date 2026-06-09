@@ -2,7 +2,7 @@ from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from task_service.infrastructure.db.session import async_engine
+from task_service.infrastructure.db.session import get_async_engine
 from task_service.schemas.responses import HealthLiveResponse, HealthReadyResponse
 
 router = APIRouter(prefix="/api/v1", tags=["health"])
@@ -35,7 +35,7 @@ async def legacy_health_check() -> HealthLiveResponse:
 )
 async def health_ready(response: Response) -> HealthReadyResponse:
     try:
-        async with async_engine.connect() as connection:
+        async with get_async_engine().connect() as connection:
             await connection.execute(text("select 1"))
     except SQLAlchemyError:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

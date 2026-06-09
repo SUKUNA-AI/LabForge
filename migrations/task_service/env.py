@@ -1,6 +1,5 @@
 from logging.config import fileConfig
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -20,11 +19,9 @@ load_dotenv(PROJECT_ROOT / ".env")
 # access to the values within the .ini file in use.
 config = context.config
 
-database_url = os.getenv("DATABASE_URL")
-if not database_url:
-    raise RuntimeError("DATABASE_URL is not set")
+from task_service.infrastructure.config import get_settings
 
-config.set_main_option("sqlalchemy.url", database_url)
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
